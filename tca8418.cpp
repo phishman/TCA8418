@@ -314,6 +314,16 @@ uint8_t KEYS::getInterruptStatus(void) {
   return(status & 0x0F);
 }
 
+void KEYS::clearInterruptStatus(uint8_t flags) {
+
+  flags &= 0x0F;
+  writeByte(flags, REG_INT_STAT);
+}
+
+void KEYS::clearInterruptStatus(void) {
+  clearInterruptStatus(0x0F);
+}
+
 uint8_t KEYS::getKeyEvent(uint8_t event) {
   uint8_t keycode;
   

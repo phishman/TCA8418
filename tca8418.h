@@ -144,6 +144,8 @@ public:
   void updateGPIO();
   void dumpreg(void);
   uint8_t getInterruptStatus(void);
+  void clearInterruptStatus(uint8_t flags);
+  void clearInterruptStatus(void);
   uint8_t getKeyEvent(uint8_t event);
   uint8_t getKeyEvent(void);
   uint8_t getKeyEventCount(void);
