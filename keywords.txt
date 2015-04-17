@@ -26,6 +26,7 @@ write KEYWORD2
 read KEYWORD2
 toggle KEYWORD2
 blink KEYWORD2
+enableInterrupt KEYWORD2
 attachInterrupt KEYWORD2
 detachInterrupt KEYWORD2
 pinInterruptMode KEYWORD2

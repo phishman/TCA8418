@@ -35,7 +35,7 @@
 
 
 KEYS::KEYS() :
-	_PORT(0), _PIN(0), _DDR(0), _PKG(0), _PUR(0), _address(0)
+	_address(0)
 #ifdef TCA8418_INTERRUPT_SUPPORT
 	, _oldPIN(0), _isrIgnore(0), _pcintPin(0), _intMode(), _intCallback()
 #endif
@@ -102,7 +102,7 @@ bool KEYS::readByte(uint8_t *data, uint8_t reg) {
 	  return(true);
 	}
 	delay(1);
-  } 
+  } 			// Experimental
   
   *data = I2CREAD();
 
@@ -110,18 +110,36 @@ return(false);
 }
 
 void KEYS::write3Bytes(uint32_t data, uint8_t reg) {
+
+  union
+  {
+    uint8_t b[4];
+    uint32_t w;
+  } datau;
+  
+  datau.w = data;
+
   Wire.beginTransmission(_address);
   I2CWRITE((uint8_t) reg);
   
-  I2CWRITE((uint8_t) (data&0xFF));
-  I2CWRITE((uint8_t) ((data&0x00FF00)>>8));
-  I2CWRITE((uint8_t) ((data&0x030000)>>16));
+  I2CWRITE((uint8_t) datau.b[0]);
+  I2CWRITE((uint8_t) datau.b[1]);
+  I2CWRITE((uint8_t) datau.b[2]);
+  
   Wire.endTransmission();
-
   return;
 }
 
 bool KEYS::read3Bytes(uint32_t *data, uint8_t reg) {
+
+  union
+  {
+    uint8_t b[4];
+    uint32_t w;
+  } datau;
+  
+  datau.w = *data;
+
   Wire.beginTransmission(_address);
   I2CWRITE((uint8_t) reg);
   Wire.endTransmission();
@@ -134,52 +152,55 @@ bool KEYS::read3Bytes(uint32_t *data, uint8_t reg) {
 	  return(true);
 	}
 	delay(1);
-  } 
+  } 		//Experimental
   
-  *data = I2CREAD();
-  *data |= I2CREAD() << 8;
-  *data |= I2CREAD() << 16;
+  datau.b[0] = I2CREAD();
+  datau.b[1] = I2CREAD();
+  datau.b[2] = I2CREAD();
+  
+  *data = datau.w;
+  
 
 return(false);
 }
 
-void KEYS::pinMode(uint8_t pin, uint8_t mode) {
+void KEYS::pinMode(uint32_t pin, uint8_t mode) {
   uint32_t pullUp, dbc;
   
   readGPIO();
   switch(mode) {
     case INPUT:
-	  _PORT &= ~(1 << pin);
-	  _DDR &= ~(1 << pin);
-	  _PKG &= ~(1 << pin);
-	  _PUR |= (1 << pin);
+	  bitClear(_PORT, pin);
+	  bitClear(_DDR, pin);
+	  bitClear(_PKG, pin);
+	  bitSet(_PUR, pin);
 	  break;
 	case INPUT_PULLUP:
-	  _PORT &= ~(1 << pin);
-	  _DDR &= ~(1 << pin);
-	  _PKG &= ~(1 << pin);
-	  _PUR &= ~(1 << pin); 
+	  bitClear(_PORT, pin);
+	  bitClear(_DDR, pin);
+	  bitClear(_PKG, pin);
+	  bitClear(_PUR, pin); 
 	  break;
     case OUTPUT:
-	  _PORT &= ~(1 << pin);
-	  _DDR |= (1 << pin);
-	  _PKG &= ~(1 << pin);
-	  _PUR |= (1 << pin);
+	  bitClear(_PORT, pin);
+	  bitSet(_DDR, pin);
+	  bitClear(_PKG, pin);
+	  bitSet(_PUR, pin);
 	  break;
 	case KEYPAD:
-	  _PORT &= ~(1 << pin);
-	  _DDR &= ~(1 << pin);
-	  _PKG |= (1 << pin);
-	  _PUR &= ~(1 << pin); 
+	  bitClear(_PORT, pin);
+	  bitClear(_DDR, pin);
+	  bitSet(_PKG, pin);
+	  bitClear(_PUR, pin); 
 	  break;
 	case DEBOUNCE:
 	  read3Bytes((uint32_t *)&dbc, REG_DEBOUNCE_DIS1);
-	  dbc &= (1 << pin);
+	  bitClear(dbc, pin);
 	  write3Bytes((uint32_t)dbc, REG_DEBOUNCE_DIS1);
 	  break;
 	case NODEBOUNCE:
 	  read3Bytes((uint32_t *)&dbc, REG_DEBOUNCE_DIS1);
-	  dbc |= ~(1 << pin);
+	  bitSet(dbc, pin);
 	  write3Bytes((uint32_t)dbc, REG_DEBOUNCE_DIS1);
 	  break;
 	default:
@@ -189,21 +210,22 @@ void KEYS::pinMode(uint8_t pin, uint8_t mode) {
 }
 
 
-void KEYS::digitalWrite(uint8_t pin, uint8_t value) {
+void KEYS::digitalWrite(uint32_t pin, uint8_t value) {
 
-  if(value)
-    _PORT |= (1 << pin);
-  else
-    _PORT &= ~(1 << pin);
   
+  if(value)
+    bitSet(_PORT, pin);
+  else
+    bitClear(_PORT, pin);
+
   updateGPIO();
 }
 
-uint8_t KEYS::digitalRead(uint8_t pin) {
+uint8_t KEYS::digitalRead(uint32_t pin) {
 
   readGPIO();
   
-  return(_PIN & (1 << pin)) ? HIGH : LOW;
+  return(_PIN & bit(pin)) ? HIGH : LOW;
 }
 
 void KEYS::write(uint32_t value) {
@@ -220,14 +242,14 @@ uint32_t KEYS::read(void) {
   return _PORT;
 }
 
-void KEYS::toggle(uint8_t pin) {
+void KEYS::toggle(uint32_t pin) {
 
-  _PORT ^= (1 << pin);
+  _PORT ^= (bit(pin));
   
   updateGPIO();
 }
 
-void KEYS::blink(uint8_t pin, uint16_t count, uint32_t duration) {
+void KEYS::blink(uint32_t pin, uint16_t count, uint32_t duration) {
 
   duration /= count * 2;
   
@@ -258,7 +280,7 @@ void KEYS::disableInterrupt() {
   PCdetachInterrupt(_pcintPin);
 }
 
-void KEYS::pinInterruptMode(uint8_t pin, uint8_t mode, uint8_t level, uint8_t fifo) {
+void KEYS::pinInterruptMode(uint32_t pin, uint8_t mode, uint8_t level, uint8_t fifo) {
   uint32_t intSetting, levelSetting, eventmodeSetting;
 
 	
@@ -268,10 +290,10 @@ void KEYS::pinInterruptMode(uint8_t pin, uint8_t mode, uint8_t level, uint8_t fi
 
   switch(mode) {
     case INTERRUPT:
-	  intSetting |= (1 << pin);
+	  bitSet(intSetting, pin);
 	  break;
 	case NOINTERRUPT:
-	  intSetting &= ~(1 << pin);
+	  bitClear(intSetting, pin);
 	  break;
 	default:
 		break;
@@ -279,10 +301,10 @@ void KEYS::pinInterruptMode(uint8_t pin, uint8_t mode, uint8_t level, uint8_t fi
   
   switch(level) {
     case LOW:
-	  levelSetting &= ~(1 << pin);
+	  bitClear(levelSetting, pin);
 	  break;
 	case HIGH:
-	  levelSetting |= (1 << pin);
+	  bitSet(levelSetting, pin);
 	  break;
 	default:
 	  break;
@@ -290,10 +312,10 @@ void KEYS::pinInterruptMode(uint8_t pin, uint8_t mode, uint8_t level, uint8_t fi
   
   switch(fifo) {
     case FIFO:
-	  eventmodeSetting |= (1 << pin);
+	  bitSet(eventmodeSetting, pin);
 	  break;
 	case NOFIFO:
-	  eventmodeSetting &= ~(1 << pin);
+	  bitClear(eventmodeSetting, pin);
 	  break;
 	default:
 	  break;
@@ -305,7 +327,7 @@ void KEYS::pinInterruptMode(uint8_t pin, uint8_t mode, uint8_t level, uint8_t fi
   
 }
 
-void KEYS::pinInterruptMode(uint8_t pin, uint8_t mode) {
+void KEYS::pinInterruptMode(uint32_t pin, uint8_t mode) {
   pinInterruptMode(pin, mode, 0, 0);
 }
 
@@ -326,7 +348,7 @@ void KEYS::readGPIO() {
 }
 
 void KEYS::updateGPIO() {
-
+  Serial.println(_PORT,HEX);
 	write3Bytes((uint32_t)_PORT, REG_GPIO_DAT_OUT1);  	//Write Data OUT Registers
 	write3Bytes((uint32_t)_DDR, REG_GPIO_DIR1);			//Write Data DIRECTION Registers
 	write3Bytes((uint32_t)_PKG, REG_KP_GPIO1);			//Write Keypad/GPIO SELECTION Registers
@@ -337,6 +359,8 @@ void KEYS::dumpreg(void) {
   uint8_t data;
   for(int x=0x01;x<0x2F;x++) {
     readByte(&data, x);
+	Serial.print(x, HEX);
+	Serial.print(":");
 	Serial.print(data, HEX);
 	Serial.print(" ");
   }
@@ -393,6 +417,6 @@ uint32_t KEYS::getGPIOInterrupt(void) {
   readByte(&IntU.arr[1], REG_GPIO_INT_STAT2);
   readByte(&IntU.arr[0], REG_GPIO_INT_STAT1);
 
-  Ints = IntU.val & 0x0003FFFF;
+  Ints = IntU.val;
   return(Ints);
 }

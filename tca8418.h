@@ -138,18 +138,18 @@ public:
   bool read3Bytes(uint32_t *data, uint8_t reg);
   void write3Bytes(uint32_t data, uint8_t reg);
   bool readByte(uint8_t *data, uint8_t reg);
-  void pinMode(uint8_t pin, uint8_t mode);
-  void digitalWrite(uint8_t pin, uint8_t value);
-  uint8_t digitalRead(uint8_t pin);
+  void pinMode(uint32_t pin, uint8_t mode);
+  void digitalWrite(uint32_t pin, uint8_t value);
+  uint8_t digitalRead(uint32_t pin);
   void write(uint32_t value);
   uint32_t read(void);
-  void toggle(uint8_t pin);
-  void blink(uint8_t pin, uint16_t count, uint32_t duration);
+  void toggle(uint32_t pin);
+  void blink(uint32_t pin, uint16_t count, uint32_t duration);
 #ifdef TCA8418_INTERRUPT_SUPPORT
   void enableInterrupt(uint8_t pin, void(*selfCheckFunction)(void));
   void disableInterrupt();
-  void pinInterruptMode(uint8_t pin, uint8_t mode, uint8_t level, uint8_t fifo);
-  void pinInterruptMode(uint8_t pin, uint8_t mode);
+  void pinInterruptMode(uint32_t pin, uint8_t mode, uint8_t level, uint8_t fifo);
+  void pinInterruptMode(uint32_t pin, uint8_t mode);
 #endif
   void readGPIO();
   void updateGPIO();
@@ -163,13 +163,7 @@ public:
   uint32_t getGPIOInterrupt(void);
   
 protected:
-  
-  volatile uint32_t _PKG; // Pin Keypad or GPIO 0=GPIO, 1=Keypad
-  volatile uint32_t _PORT;
-  volatile uint32_t _PIN; // Pin State
-  volatile uint32_t _DDR; //Pin Direction INPUT or OUTPUT
-  volatile uint32_t _PUR; //Pull-Up Resistor Selection
-
+ 
 #ifdef TCA8418_INTERRUPT_SUPPORT
 
   /** Old value of _PIN variable */
@@ -190,6 +184,11 @@ protected:
 
 private:
   uint8_t _address;
+  uint32_t _PKG; // Pin Keypad or GPIO 0=GPIO, 1=Keypad
+  uint32_t _PORT;
+  uint32_t _PIN; // Pin State
+  uint32_t _DDR; //Pin Direction INPUT or OUTPUT
+  uint32_t _PUR; //Pull-Up Resistor Selection
   
  };
 
