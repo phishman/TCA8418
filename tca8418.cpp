@@ -35,9 +35,9 @@
 
 
 KEYS::KEYS() :
-	_PORT(0), _PIN(0), _DDR(0), _PKG(0), _GEM(0), _DBP(0), _PUR(0), _ELD(0), _address(0)
+	_PORT(0), _PIN(0), _DDR(0), _PKG(0), _PUR(0), _address(0)
 #ifdef TCA8418_INTERRUPT_SUPPORT
-	, _IRQ(0), _oldPIN(0), _isrIgnore(0), _pcintPin(0), _intMode(), _intCallback()
+	, _oldPIN(0), _isrIgnore(0), _pcintPin(0), _intMode(), _intCallback()
 #endif
 {
 }
@@ -66,6 +66,7 @@ uint8_t KEYS::readKeypad(void)
 */
 bool KEYS::configureKeys(uint8_t rows, uint16_t cols, uint8_t config)
 {
+  //Pins all default to GPIO. pinMode(x, KEYPAD); may be used for individual pins.
   writeByte(rows, REG_KP_GPIO1);
   
   uint8_t col_tmp;
@@ -74,6 +75,7 @@ bool KEYS::configureKeys(uint8_t rows, uint16_t cols, uint8_t config)
   col_tmp = (uint8_t)(0x03 & (cols>>8));
   writeByte(col_tmp, REG_KP_GPIO3);
   
+  config |= CFG_AI;
   writeByte(config, REG_CFG);
 }
 
@@ -107,20 +109,78 @@ bool KEYS::readByte(uint8_t *data, uint8_t reg) {
 return(false);
 }
 
-void KEYS::pinMode(uint8_t pin, uint8_t mode) {
+void KEYS::write3Bytes(uint32_t data, uint8_t reg) {
+  Wire.beginTransmission(_address);
+  I2CWRITE((uint8_t) reg);
+  
+  I2CWRITE((uint8_t) (data&0xFF));
+  I2CWRITE((uint8_t) ((data&0x00FF00)>>8));
+  I2CWRITE((uint8_t) ((data&0x030000)>>16));
+  Wire.endTransmission();
 
+  return;
+}
+
+bool KEYS::read3Bytes(uint32_t *data, uint8_t reg) {
+  Wire.beginTransmission(_address);
+  I2CWRITE((uint8_t) reg);
+  Wire.endTransmission();
+  uint8_t timeout=0;
+  
+  Wire.requestFrom(_address, (uint8_t) 0x03);
+  while(Wire.available() < 3) {
+    timeout++;
+	if(timeout > I2CTIMEOUT) {
+	  return(true);
+	}
+	delay(1);
+  } 
+  
+  *data = I2CREAD();
+  *data |= I2CREAD() << 8;
+  *data |= I2CREAD() << 16;
+
+return(false);
+}
+
+void KEYS::pinMode(uint8_t pin, uint8_t mode) {
+  uint32_t pullUp, dbc;
+  
+  readGPIO();
   switch(mode) {
     case INPUT:
-	  _DDR &= ~(1 << pin);
 	  _PORT &= ~(1 << pin);
+	  _DDR &= ~(1 << pin);
+	  _PKG &= ~(1 << pin);
+	  _PUR |= (1 << pin);
 	  break;
 	case INPUT_PULLUP:
+	  _PORT &= ~(1 << pin);
 	  _DDR &= ~(1 << pin);
-	  _PORT |= ~(1 << pin);
+	  _PKG &= ~(1 << pin);
+	  _PUR &= ~(1 << pin); 
 	  break;
     case OUTPUT:
-	  _DDR |= ~(1 << pin);
 	  _PORT &= ~(1 << pin);
+	  _DDR |= (1 << pin);
+	  _PKG &= ~(1 << pin);
+	  _PUR |= (1 << pin);
+	  break;
+	case KEYPAD:
+	  _PORT &= ~(1 << pin);
+	  _DDR &= ~(1 << pin);
+	  _PKG |= (1 << pin);
+	  _PUR &= ~(1 << pin); 
+	  break;
+	case DEBOUNCE:
+	  read3Bytes((uint32_t *)&dbc, REG_DEBOUNCE_DIS1);
+	  dbc &= (1 << pin);
+	  write3Bytes((uint32_t)dbc, REG_DEBOUNCE_DIS1);
+	  break;
+	case NODEBOUNCE:
+	  read3Bytes((uint32_t *)&dbc, REG_DEBOUNCE_DIS1);
+	  dbc |= ~(1 << pin);
+	  write3Bytes((uint32_t)dbc, REG_DEBOUNCE_DIS1);
 	  break;
 	default:
 	  break;
@@ -157,7 +217,7 @@ uint32_t KEYS::read(void) {
 
   readGPIO();
   
-  return _PIN;
+  return _PORT;
 }
 
 void KEYS::toggle(uint8_t pin) {
@@ -198,67 +258,57 @@ void KEYS::disableInterrupt() {
   PCdetachInterrupt(_pcintPin);
 }
 
-void KEYS::checkForInterrupt() {
+void KEYS::pinInterruptMode(uint8_t pin, uint8_t mode, uint8_t level, uint8_t fifo) {
+  uint32_t intSetting, levelSetting, eventmodeSetting;
 
-	/* Avoid nested interrupt triggered by I2C read/write */
-	if(_isrIgnore)
-		return;
-	else
-		_isrIgnore = 1;
-		
-	/* Re-enable interrupts to allow Wire library to work */
-	sei();
-
-	/* Read current pins values */
-	readGPIO();
-
-	/* Check all pins */
-	for (uint8_t i = 0; i < 24; ++i) {
-
-		/* Check for interrupt handler */
-		if (!_intCallback[i])
-			continue;
-
-		/* Check for interrupt event */
-		switch (_intMode[i]) {
-		case CHANGE:
-			if ((1 << i) & (_PIN ^ _oldPIN))
-				_intCallback[i]();
-			break;
-
-		case LOW:
-			if (!(_PIN & (1 << i)))
-				_intCallback[i]();
-			break;
-
-		case FALLING:
-			if ((_oldPIN & (1 << i)) && !(_PIN & (1 << i)))
-				_intCallback[i]();
-			break;
-
-		case RISING:
-			if (!(_oldPIN & (1 << i)) && (_PIN & (1 << i)))
-				_intCallback[i]();
-			break;
-		}
-	}
 	
-	/* Turn off ISR ignore flag */
-	_isrIgnore = 0;
+  read3Bytes((uint32_t *)&intSetting, REG_GPIO_INT_EN1);
+  read3Bytes((uint32_t *)&levelSetting, REG_GPIO_INT_LVL1);
+  read3Bytes((uint32_t *)&eventmodeSetting, REG_GPI_EM1);
+
+  switch(mode) {
+    case INTERRUPT:
+	  intSetting |= (1 << pin);
+	  break;
+	case NOINTERRUPT:
+	  intSetting &= ~(1 << pin);
+	  break;
+	default:
+		break;
+  }
+  
+  switch(level) {
+    case LOW:
+	  levelSetting &= ~(1 << pin);
+	  break;
+	case HIGH:
+	  levelSetting |= (1 << pin);
+	  break;
+	default:
+	  break;
+  }
+  
+  switch(fifo) {
+    case FIFO:
+	  eventmodeSetting |= (1 << pin);
+	  break;
+	case NOFIFO:
+	  eventmodeSetting &= ~(1 << pin);
+	  break;
+	default:
+	  break;
+  }
+  
+  write3Bytes((uint32_t)intSetting, REG_GPIO_INT_EN1);
+  write3Bytes((uint32_t)levelSetting, REG_GPIO_INT_LVL1);
+  write3Bytes((uint32_t)eventmodeSetting, REG_GPI_EM1);
+  
 }
 
-void KEYS::attachInterrupt(uint8_t pin, void (*userFunc)(void), uint8_t mode) {
-
-	/* Store interrupt mode and callback */
-	_intMode[pin] = mode;
-	_intCallback[pin] = userFunc;
+void KEYS::pinInterruptMode(uint8_t pin, uint8_t mode) {
+  pinInterruptMode(pin, mode, 0, 0);
 }
 
-void KEYS::detachInterrupt(uint8_t pin) {
-
-	/* Void interrupt handler */
-	_intCallback[pin] = 0;
-}
 #endif
 
 void KEYS::readGPIO() {
@@ -267,34 +317,20 @@ void KEYS::readGPIO() {
 	/* Store old _PIN value */
 	_oldPIN = _PIN;
 #endif
-
-	uint8_t data;
 	
-	readByte(&data, REG_GPIO_DAT_STAT1);
-	_PIN = data; /* LSB first */
-	readByte(&data, REG_GPIO_DAT_STAT2);
-	_PIN |= (data << 8);
-	readByte(&data, REG_GPIO_DAT_STAT3);
-	_PIN |= (data << 16);
+	read3Bytes((uint32_t *)&_PORT, REG_GPIO_DAT_OUT1);  //Read Data OUT Registers
+	read3Bytes((uint32_t *)&_PIN, REG_GPIO_DAT_STAT1);	//Read Data STATUS Registers
+	read3Bytes((uint32_t *)&_DDR, REG_GPIO_DIR1);		//Read Data DIRECTION Registers
+	read3Bytes((uint32_t *)&_PKG, REG_KP_GPIO1);		//Read Keypad/GPIO SELECTION Registers
+	read3Bytes((uint32_t *)&_PUR, REG_GPIO_PULL1);		//Read KPull-Up RESISTOR Registers
 }
 
 void KEYS::updateGPIO() {
-  uint8_t data;
 
-	/* Read current GPIO states */
-	//readGPIO(); // Experimental
-
-	/* Compute new GPIO states */
-	//uint8_t value = ((_PIN & ~_DDR) & ~(~_DDR & _PORT)) | _PORT; // Experimental
-	uint32_t value = (_PIN & ~_DDR) | _PORT;
-
-	/* Start communication and send GPIO values as byte */
-	data = (value & 0x000000FF);
-	writeByte(data, REG_GPIO_DAT_OUT1);
-	data = ((value & 0x0000FF00) >> 8);
-	writeByte(data, REG_GPIO_DAT_OUT2);
-	data = ((value & 0x00030000) >> 16);
-	writeByte(data, REG_GPIO_DAT_OUT3);
+	write3Bytes((uint32_t)_PORT, REG_GPIO_DAT_OUT1);  	//Write Data OUT Registers
+	write3Bytes((uint32_t)_DDR, REG_GPIO_DIR1);			//Write Data DIRECTION Registers
+	write3Bytes((uint32_t)_PKG, REG_KP_GPIO1);			//Write Keypad/GPIO SELECTION Registers
+	write3Bytes((uint32_t)_PUR, REG_GPIO_PULL1);		//Write Pull-Up RESISTOR Registers
 }
 
 void KEYS::dumpreg(void) {

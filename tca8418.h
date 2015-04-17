@@ -19,6 +19,16 @@
 #include <inttypes.h>
 
 
+#define KEYPAD 0x37
+#define GPIO 0x38
+#define EDGE 0x39
+#define LEVEL 0x40
+#define INTERRUPT 0x41
+#define NOINTERRUPT 0x42
+#define FIFO 0x43
+#define NOFIFO 0x44
+#define DEBOUNCE 0x45
+#define NODEBOUNCE 0x46
 
 #define I2CTIMEOUT 100
 
@@ -125,6 +135,8 @@ public:
   uint8_t readKeypad(void);
   bool configureKeys(uint8_t rows, uint16_t cols, uint8_t config);
   void writeByte(uint8_t data, uint8_t reg);
+  bool read3Bytes(uint32_t *data, uint8_t reg);
+  void write3Bytes(uint32_t data, uint8_t reg);
   bool readByte(uint8_t *data, uint8_t reg);
   void pinMode(uint8_t pin, uint8_t mode);
   void digitalWrite(uint8_t pin, uint8_t value);
@@ -136,9 +148,8 @@ public:
 #ifdef TCA8418_INTERRUPT_SUPPORT
   void enableInterrupt(uint8_t pin, void(*selfCheckFunction)(void));
   void disableInterrupt();
-  void checkForInterrupt();
-  void attachInterrupt(uint8_t pin, void (*userFunc)(void), uint8_t mode);
-  void detachInterrupt(uint8_t pin);
+  void pinInterruptMode(uint8_t pin, uint8_t mode, uint8_t level, uint8_t fifo);
+  void pinInterruptMode(uint8_t pin, uint8_t mode);
 #endif
   void readGPIO();
   void updateGPIO();
@@ -156,13 +167,11 @@ protected:
   volatile uint32_t _PKG; // Pin Keypad or GPIO 0=GPIO, 1=Keypad
   volatile uint32_t _PORT;
   volatile uint32_t _PIN; // Pin State
-  volatile uint32_t _GEM; // GPI Event Mode
-  volatile uint32_t _DBP; // Debounce 0=enabled, 1=disabled.
   volatile uint32_t _DDR; //Pin Direction INPUT or OUTPUT
-  volatile uint32_t _PUR; //Pin Pull-Up Resistor 0=enabled, 1=disabled.
-  volatile uint32_t _ELD; //Edge/Level Detect LOW or HIGH
+  volatile uint32_t _PUR; //Pull-Up Resistor Selection
+
 #ifdef TCA8418_INTERRUPT_SUPPORT
-  volatile uint32_t _IRQ; //GPIO Pin Interrupt TRUE or FALSE
+
   /** Old value of _PIN variable */
   volatile uint32_t _oldPIN;
 	
