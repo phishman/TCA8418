@@ -348,7 +348,7 @@ void KEYS::readGPIO() {
 }
 
 void KEYS::updateGPIO() {
-  Serial.println(_PORT,HEX);
+
 	write3Bytes((uint32_t)_PORT, REG_GPIO_DAT_OUT1);  	//Write Data OUT Registers
 	write3Bytes((uint32_t)_DDR, REG_GPIO_DIR1);			//Write Data DIRECTION Registers
 	write3Bytes((uint32_t)_PKG, REG_KP_GPIO1);			//Write Keypad/GPIO SELECTION Registers
