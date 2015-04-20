@@ -30,7 +30,9 @@
 #define DEBOUNCE 0x45
 #define NODEBOUNCE 0x46
 
-#define I2CTIMEOUT 100
+#ifndef I2CTIMEOUT
+  #define I2CTIMEOUT 100
+#endif
 
 /* TCA8418 hardware limits */
 #define TCA8418_MAX_ROWS 8
@@ -161,6 +163,9 @@ public:
   uint8_t getKeyEvent(void);
   uint8_t getKeyEventCount(void);
   uint32_t getGPIOInterrupt(void);
+  bool isKeyDown(uint8_t key);
+  bool getKey(uint8_t *key);
+  uint8_t getKey(void);
   
 protected:
  

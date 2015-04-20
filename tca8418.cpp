@@ -420,3 +420,23 @@ uint32_t KEYS::getGPIOInterrupt(void) {
   Ints = IntU.val;
   return(Ints);
 }
+
+bool KEYS::isKeyDown(uint8_t key) {
+  if(key & 0x80)
+    return true;
+  else
+    return false;
+}
+
+bool KEYS::getKey(uint8_t *key) {
+  uint8_t tmpkey;
+  
+  tmpkey = readKeypad();
+  *key = *key & 0x7F;
+  
+  return(isKeyDown(tmpkey));
+}
+
+uint8_t KEYS::getKey(void) {
+  return(readKeypad() & 0x7F);
+}

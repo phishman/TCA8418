@@ -38,6 +38,8 @@ clearInterruptStatus KEYWORD2
 getKeyEvent KEYWORD2
 getKeyEventCount KEYWORD2
 getGPIOInterrupt KEYWORD2
+isKeyDown KEYWORD2
+getKey KEYWORD2
 
 
 #######################################
