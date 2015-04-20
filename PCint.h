@@ -1,3 +1,8 @@
+// http://www.arduino.cc/playground/Main/PcInt
+
+#ifndef PCINTH_H
+#define PCINTH_H
+
 #include "pins_arduino.h"
 
 volatile uint8_t *port_to_pcmask[] = { &PCMSK0, &PCMSK1, &PCMSK2 };
@@ -110,3 +115,5 @@ SIGNAL(PCINT1_vect) {
 SIGNAL(PCINT2_vect) {
 	PCint(2);
 }
+
+#endif
